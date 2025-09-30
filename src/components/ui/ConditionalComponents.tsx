@@ -68,9 +68,9 @@ export default function ConditionalComponents({
         </div>
       </div>
       {/* <Frame /> */}
-      <div className="bg-black text-white min-h-svh">
+      {/* <div className="bg-black text-white min-h-svh">
         <MobileHomePage />
-      </div>
+      </div> */}
     </>
   );
   // }
