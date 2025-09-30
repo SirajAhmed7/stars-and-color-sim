@@ -1,0 +1,126 @@
+.centerCircle {
+  /* opacity: 0; */
+  transform: translate(-50%, -50%) rotate(360deg);
+  animation:
+    fade-n-rotate 1.2s cubic-bezier(0.33, 0.33, 0.07, 0.98) 0.3s forwards,
+    centerCircle-rotate 9s ease-in-out 2.5s infinite;
+}
+
+.gyro {
+  transform: translate(-50%, -50%) rotate(360deg) scale(0);
+  animation: scale-n-rotate 1.2s cubic-bezier(0.33, 0.33, 0.07, 0.98) 0.3s
+    forwards;
+}
+
+.plusLines {
+  opacity: 0;
+  animation:
+    fade-n-rotate 1.2s cubic-bezier(0.33, 0.33, 0.07, 0.98) 0.3s forwards,
+    plusLines-rotate 9s ease-in-out 1.7s infinite;
+}
+
+.strokeCircle {
+  opacity: 0;
+  animation:
+    fade-n-rotate 1.2s cubic-bezier(0.33, 0.33, 0.07, 0.98) 0.3s forwards,
+    plusLines-rotate 7s ease-in-out 2s infinite;
+}
+
+.terminal {
+  scale: 0;
+  transform-origin: top left;
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--frame-size) * 1.5) 0,
+    100% calc(var(--frame-size) * 1.5),
+    100% 100%,
+    0 100%
+  );
+  animation: scale-up 1.2s cubic-bezier(0.33, 0.33, 0.07, 0.98) 1.2s forwards;
+}
+
+@media (max-width: 1024px) {
+  .terminal {
+    clip-path: none;
+  }
+}
+
+@keyframes scale-n-rotate {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg) scale(0);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(360deg) scale(1);
+  }
+}
+
+@keyframes fade-n-rotate {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+}
+
+@keyframes plusLines-rotate {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  25% {
+    transform: translate(-50%, -50%) rotate(50deg);
+  }
+  30% {
+    transform: translate(-50%, -50%) rotate(120deg);
+  }
+  60% {
+    transform: translate(-50%, -50%) rotate(-10deg);
+  }
+  63% {
+    transform: translate(-50%, -50%) rotate(30deg);
+  }
+  85% {
+    transform: translate(-50%, -50%) rotate(-150deg);
+  }
+  95% {
+    transform: translate(-50%, -50%) rotate(20deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+}
+
+@keyframes centerCircle-rotate {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  25% {
+    transform: translate(-50%, -50%) rotate(-70deg);
+  }
+  30% {
+    transform: translate(-50%, -50%) rotate(-100deg);
+  }
+  60% {
+    transform: translate(-50%, -50%) rotate(30deg);
+  }
+  63% {
+    transform: translate(-50%, -50%) rotate(20deg);
+  }
+  85% {
+    transform: translate(-50%, -50%) rotate(200deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+}
+
+@keyframes scale-up {
+  0% {
+    scale: 0;
+  }
+  100% {
+    scale: 1;
+  }
+}

@@ -1,0 +1,934 @@
+var FLUID_CELL = 0,
+  AIR_CELL = 1,
+  SOLID_CELL = 2,
+  EMIT_RATE = 2e3;
+let _v0 = new Vector2(),
+  _v1 = new Vector2(),
+  _v2 = new Vector2();
+function clamp(o, e, t) {
+  return o < e ? e : o > t ? t : o;
+}
+class FlipSim {
+  constructor() {
+    (this.isFlushing = !1),
+      (this.hasInitialized = !1),
+      (this.emitterPosA = new Vector2(1, 1)),
+      (this.emitterPosB = new Vector2(1, 1)),
+      (this.colliderRectList = []);
+  }
+  addColliderRect = (e, t = 0, r = 0, n = 0, a = 0) => {
+    let l = this.fInvSpacing,
+      c = this.fNumY,
+      u = clamp(Math.round(e.x * l) - t, 0, this.fNumX - 1),
+      f = clamp(Math.round(e.y * l) - a, 0, this.fNumY - 1),
+      p = clamp(Math.round((e.x + e.w) * l) + r, 0, this.fNumX - 1),
+      g = clamp(Math.round((e.y + e.h) * l) + n, 0, this.fNumY - 1);
+    (p = Math.max(u, p)), (g = Math.max(f, g)), this.colliderRectList.push(e);
+    for (let _ = u; _ <= p; _++)
+      for (let T = f; T <= g; T++) {
+        var v = _ * c + T;
+        this.s[v] = 0;
+      }
+    (e.x = u / l),
+      (e.y = f / l),
+      (e.w = Math.max(1, p - u) / l),
+      (e.h = Math.max(1, g - f) / l),
+      (e.l = e.x),
+      (e.r = e.x + e.w),
+      (e.b = e.y),
+      (e.t = e.y + e.h),
+      (e.hw = e.w / 2),
+      (e.hh = e.h / 2),
+      (e.cx = e.x + e.hw),
+      (e.cy = e.y + e.hh);
+  };
+  init(e, t, r, n, a, l) {
+    let c = this.hasInitialized;
+    (this.colliderRectList.length = 0),
+      (this.density = e),
+      (this.fNumX = Math.ceil(t / n) + 1),
+      (this.fNumY = Math.ceil(r / n) + 1),
+      (this.h = Math.max(t / this.fNumX, r / this.fNumY)),
+      (this.fInvSpacing = 1 / this.h);
+    var u = this.fNumX * this.fNumY;
+    (this.tankInnerWidth = (this.fNumX - 2) * this.h),
+      (this.tankInnerHeight = (this.fNumY - 2) * this.h),
+      (!c || u > this.cellType.length) &&
+        ((this.u = new Float32Array(u)),
+        (this.v = new Float32Array(u)),
+        (this.du = new Float32Array(u)),
+        (this.dv = new Float32Array(u)),
+        (this.prevU = new Float32Array(u)),
+        (this.prevV = new Float32Array(u)),
+        (this.p = new Int8Array(u)),
+        (this.s = new Int8Array(u)),
+        (this.cellType = new Int8Array(u)),
+        (this.particleDensity = new Float32Array(u))),
+      (this.fNumCells = u);
+    for (var f = 0; f < u; f++)
+      this.u[f] =
+        this.v[f] =
+        this.du[f] =
+        this.dv[f] =
+        this.prevU[f] =
+        this.prevV[f] =
+        this.p[f] =
+        this.s[f] =
+        this.cellType[f] =
+        this.particleDensity[f] =
+          0;
+    (this.particleRadius = a),
+      (this.pInvSpacing = 1 / (2.2 * a)),
+      (this.pNumX = Math.floor(t * this.pInvSpacing) + 1),
+      (this.pNumY = Math.floor(r * this.pInvSpacing) + 1),
+      (this.particleRestDensity = 0);
+    let p = this.pNumX * this.pNumY;
+    if (!c || p > this.numCellParticles.length)
+      (this.numCellParticles = new Uint32Array(p)),
+        (this.firstCellParticle = new Uint32Array(p + 1));
+    else {
+      for (var f = 0; f < p; f++)
+        (this.numCellParticles[f] = 0), (this.firstCellParticle[f] = 0);
+      this.firstCellParticle[p] = 0;
+    }
+    (this.pNumCells = p),
+      (this.particlePosOut = new Float32Array(2 * l)),
+      (this.particlePos = new Float32Array(2 * l)),
+      (this.particleInfo = new Float32Array(2 * l)),
+      (!c || l > this.particleDir.length / 2) &&
+        ((this.particleDir = new Float32Array(2 * l)),
+        (this.particlePrevPos = new Float32Array(2 * l)),
+        (this.particleVel = new Float32Array(2 * l)),
+        (this.cellParticleIds = new Uint32Array(l)),
+        (this.particleStatuses = new Uint8Array(l)));
+    for (var f = 0; f < l; f++)
+      (this.particlePos[f * 2 + 0] = -1e4),
+        (this.particlePos[f * 2 + 1] = 0),
+        (this.particlePosOut[f * 2 + 0] = -1e4),
+        (this.particlePosOut[f * 2 + 1] = 0),
+        (this.particleInfo[f * 2 + 0] = 0),
+        (this.particleInfo[f * 2 + 1] = 0),
+        (this.particleDir[f * 2 + 0] = 0),
+        (this.particleDir[f * 2 + 1] = 0),
+        (this.particlePrevPos[f * 2 + 0] = -1e4),
+        (this.particlePrevPos[f * 2 + 1] = 0),
+        (this.particleVel[f * 2 + 0] = 0),
+        (this.particleVel[f * 2 + 1] = 0),
+        (this.cellParticleIds[f] = 0),
+        (this.particleStatuses[f] = 0);
+    this.numParticles = l;
+    for (var g = this.fNumY, f = 0; f < this.fNumX; f++)
+      for (var v = 0; v < this.fNumY; v++) {
+        var _ = 0;
+        f > 0 && f < this.fNumX - 1 && v > 0 && v < this.fNumY - 1 && (_ = 1),
+          (this.s[f * g + v] = _);
+      }
+    this.hasInitialized = !0;
+  }
+  integrateParticles(e, t) {
+    for (var r = 0; r < this.numParticles; r++)
+      this.particleStatuses[r] &&
+        ((this.particleVel[2 * r + 1] += e * t),
+        (this.particlePos[2 * r] += this.particleVel[2 * r] * e),
+        (this.particlePos[2 * r + 1] += this.particleVel[2 * r + 1] * e));
+  }
+  pushParticlesApart(e) {
+    this.numCellParticles.fill(0);
+    for (var t = 0; t < this.numParticles; t++)
+      if (this.particleStatuses[t]) {
+        var r = this.particlePos[2 * t],
+          n = this.particlePos[2 * t + 1],
+          a = clamp(Math.floor(r * this.pInvSpacing), 0, this.pNumX - 1),
+          l = clamp(Math.floor(n * this.pInvSpacing), 0, this.pNumY - 1),
+          c = a * this.pNumY + l;
+        this.numCellParticles[c]++;
+      }
+    for (var u = 0, t = 0; t < this.pNumCells; t++)
+      (u += this.numCellParticles[t]), (this.firstCellParticle[t] = u);
+    this.firstCellParticle[this.pNumCells] = u;
+    for (var t = 0; t < this.numParticles; t++)
+      if (this.particleStatuses[t]) {
+        var r = this.particlePos[2 * t],
+          n = this.particlePos[2 * t + 1],
+          a = clamp(Math.floor(r * this.pInvSpacing), 0, this.pNumX - 1),
+          l = clamp(Math.floor(n * this.pInvSpacing), 0, this.pNumY - 1),
+          c = a * this.pNumY + l;
+        this.firstCellParticle[c]--,
+          (this.cellParticleIds[this.firstCellParticle[c]] = t);
+      }
+    for (var f = 3 * this.particleRadius, p = f * f, g = 0; g < e; g++)
+      for (var t = 0; t < this.numParticles; t++)
+        if (this.particleStatuses[t])
+          for (
+            var v = this.particlePos[2 * t],
+              _ = this.particlePos[2 * t + 1],
+              T = Math.floor(v * this.pInvSpacing),
+              M = Math.floor(_ * this.pInvSpacing),
+              S = Math.max(T - 1, 0),
+              b = Math.max(M - 1, 0),
+              C = Math.min(T + 1, this.pNumX - 1),
+              w = Math.min(M + 1, this.pNumY - 1),
+              a = S;
+            a <= C;
+            a++
+          )
+            for (var l = b; l <= w; l++)
+              for (
+                var c = a * this.pNumY + l,
+                  u = this.firstCellParticle[c],
+                  R = this.firstCellParticle[c + 1],
+                  E = u;
+                E < R;
+                E++
+              ) {
+                var I = this.cellParticleIds[E];
+                if (I != t && this.particleStatuses[I]) {
+                  var O = this.particlePos[2 * I],
+                    k = this.particlePos[2 * I + 1],
+                    L = O - v,
+                    F = k - _,
+                    se = L * L + F * F;
+                  if (!(se > p || se == 0)) {
+                    var V = Math.sqrt(se),
+                      Y = (0.5 * (f - V)) / V;
+                    (L *= Y),
+                      (F *= Y),
+                      (this.particlePos[2 * t] -= L),
+                      (this.particlePos[2 * t + 1] -= F),
+                      (this.particlePos[2 * I] += L),
+                      (this.particlePos[2 * I + 1] += F);
+                  }
+                }
+              }
+  }
+  handleParticleCollisions(e, t, r, n, a, l) {
+    for (
+      var c = 1 / this.fInvSpacing,
+        u = this.particleRadius,
+        f = n + u,
+        p = f * f,
+        g = c + u,
+        v = (this.fNumX - 1) * c - u,
+        _ = c + u,
+        T = (this.fNumY - 1) * c - u,
+        M = this.isFlushing,
+        S = 0;
+      S < this.numParticles;
+      S++
+    )
+      if (this.particleStatuses[S]) {
+        var b = this.particlePos[2 * S],
+          C = this.particlePos[2 * S + 1],
+          w = b - t,
+          R = C - r,
+          E = w * w + R * R;
+        if (E < p) {
+          var I = Math.sqrt(E),
+            O = (f - I) / I;
+          (b += w * O),
+            (C += R * O),
+            (this.particleVel[2 * S] = a * 2),
+            (this.particleVel[2 * S + 1] = l * 2);
+        }
+        let k = b - this.particlePrevPos[2 * S],
+          L = C - this.particlePrevPos[2 * S + 1],
+          F = Math.sqrt(k * k + L * L);
+        if (F > 0) {
+          let se = k / F,
+            V = L / F,
+            Y = 1 / (Math.abs(se) > 1e-4 ? se : 1e-4),
+            D = 1 / (Math.abs(V) > 1e-4 ? V : 1e-4);
+          for (let G = 0; G < this.colliderRectList.length; G++) {
+            let H = this.colliderRectList[G];
+            if (b > H.l && b < H.r && C > H.b && C < H.t) {
+              let Z = b - H.cx,
+                q = C - H.cy,
+                ue = Z * Y,
+                oe = q * D,
+                te = Math.abs(Y) * H.hw,
+                ce = Math.abs(D) * H.hh,
+                be = Math.max(-ue - te, -oe - ce);
+              (b = b + se * be), (C = C + V * be);
+            }
+          }
+        }
+        b < g && ((b = g), (this.particleVel[2 * S] = 0)),
+          b > v && ((b = v), (this.particleVel[2 * S] = 0)),
+          C < _ &&
+            (M
+              ? ((b = -1e4), (C = 0), (this.particleStatuses[S] = 0))
+              : ((C = _), (this.particleVel[2 * S + 1] = 0))),
+          C > T && ((C = T), (this.particleVel[2 * S + 1] = 0)),
+          (this.particlePos[2 * S] = b),
+          (this.particlePos[2 * S + 1] = C);
+      }
+    for (var S = 0; S < this.numParticles; S++) {
+      _v0.fromArray(this.particleVel, 2 * S);
+      let L = _v0.length();
+      if (L > 1e-5) {
+        _v2.fromArray(this.particleDir, 2 * S),
+          _v1.fromArray(this.particleInfo, 2 * S),
+          (_v1.y = math.mix(_v1.y, 0, 1 - Math.exp(-4 * e))),
+          _v0.multiplyScalar(1 / L);
+        let F = Math.atan2(_v0.y, _v0.x),
+          se = Math.atan2(_v2.y, _v2.x);
+        (_v1.y += L * math.normalizeAngle(F - se)),
+          (_v1.x += _v1.y * e),
+          _v1.toArray(this.particleInfo, 2 * S),
+          _v2.toArray(this.particleDir, 2 * S);
+      }
+      (this.particlePrevPos[2 * S] = this.particlePos[2 * S]),
+        (this.particlePrevPos[2 * S + 1] = this.particlePos[2 * S + 1]);
+    }
+  }
+  updateParticleDensity() {
+    var e = this.fNumY,
+      t = this.h,
+      r = this.fInvSpacing,
+      n = 0.5 * t,
+      a = this.particleDensity;
+    a.fill(0);
+    for (var l = 0; l < this.numParticles; l++)
+      if (this.particleStatuses[l]) {
+        var c = this.particlePos[2 * l],
+          u = this.particlePos[2 * l + 1];
+        (c = clamp(c, t, (this.fNumX - 1) * t)),
+          (u = clamp(u, t, (this.fNumY - 1) * t));
+        var f = Math.floor((c - n) * r),
+          p = (c - n - f * t) * r,
+          g = Math.min(f + 1, this.fNumX - 2),
+          v = Math.floor((u - n) * r),
+          _ = (u - n - v * t) * r,
+          T = Math.min(v + 1, this.fNumY - 2),
+          M = 1 - p,
+          S = 1 - _;
+        f < this.fNumX && v < this.fNumY && (a[f * e + v] += M * S),
+          g < this.fNumX && v < this.fNumY && (a[g * e + v] += p * S),
+          g < this.fNumX && T < this.fNumY && (a[g * e + T] += p * _),
+          f < this.fNumX && T < this.fNumY && (a[f * e + T] += M * _);
+      }
+    if (this.particleRestDensity == 0) {
+      for (var b = 0, C = 0, l = 0; l < this.fNumCells; l++)
+        this.cellType[l] == FLUID_CELL && ((b += a[l]), C++);
+      C > 0 && (this.particleRestDensity = b / C);
+    }
+  }
+  transferVelocities(e, t) {
+    var r = this.fNumY,
+      n = this.h,
+      a = this.fInvSpacing,
+      l = 0.5 * n;
+    if (e) {
+      this.prevU.set(this.u),
+        this.prevV.set(this.v),
+        this.du.fill(0),
+        this.dv.fill(0),
+        this.u.fill(0),
+        this.v.fill(0);
+      for (var c = 0; c < this.fNumCells; c++)
+        this.cellType[c] = this.s[c] == 0 ? SOLID_CELL : AIR_CELL;
+      for (var c = 0; c < this.numParticles; c++)
+        if (this.particleStatuses[c]) {
+          var u = this.particlePos[2 * c],
+            f = this.particlePos[2 * c + 1],
+            p = clamp(Math.floor(u * a), 0, this.fNumX - 1),
+            g = clamp(Math.floor(f * a), 0, this.fNumY - 1),
+            v = p * r + g;
+          this.cellType[v] == AIR_CELL && (this.cellType[v] = FLUID_CELL);
+        }
+    }
+    for (var _ = 0; _ < 2; _++) {
+      for (
+        var T = _ == 0 ? 0 : l,
+          M = _ == 0 ? l : 0,
+          S = _ == 0 ? this.u : this.v,
+          b = _ == 0 ? this.prevU : this.prevV,
+          C = _ == 0 ? this.du : this.dv,
+          c = 0;
+        c < this.numParticles;
+        c++
+      )
+        if (this.particleStatuses[c]) {
+          var u = this.particlePos[2 * c],
+            f = this.particlePos[2 * c + 1];
+          (u = clamp(u, n, (this.fNumX - 1) * n)),
+            (f = clamp(f, n, (this.fNumY - 1) * n));
+          var w = Math.min(Math.floor((u - T) * a), this.fNumX - 2),
+            R = (u - T - w * n) * a,
+            E = Math.min(w + 1, this.fNumX - 2),
+            I = Math.min(Math.floor((f - M) * a), this.fNumY - 2),
+            O = (f - M - I * n) * a,
+            k = Math.min(I + 1, this.fNumY - 2),
+            L = 1 - R,
+            F = 1 - O,
+            se = L * F,
+            V = R * F,
+            Y = R * O,
+            D = L * O,
+            G = w * r + I,
+            H = E * r + I,
+            Z = E * r + k,
+            q = w * r + k;
+          if (e) {
+            var ue = this.particleVel[2 * c + _];
+            (S[G] += ue * se),
+              (C[G] += se),
+              (S[H] += ue * V),
+              (C[H] += V),
+              (S[Z] += ue * Y),
+              (C[Z] += Y),
+              (S[q] += ue * D),
+              (C[q] += D);
+          } else {
+            var oe = _ == 0 ? r : 1,
+              te =
+                this.cellType[G] != AIR_CELL ||
+                this.cellType[G - oe] != AIR_CELL
+                  ? 1
+                  : 0,
+              ce =
+                this.cellType[H] != AIR_CELL ||
+                this.cellType[H - oe] != AIR_CELL
+                  ? 1
+                  : 0,
+              be =
+                this.cellType[Z] != AIR_CELL ||
+                this.cellType[Z - oe] != AIR_CELL
+                  ? 1
+                  : 0,
+              Q =
+                this.cellType[q] != AIR_CELL ||
+                this.cellType[q - oe] != AIR_CELL
+                  ? 1
+                  : 0,
+              X = this.particleVel[2 * c + _],
+              C = te * se + ce * V + be * Y + Q * D;
+            if (C > 0) {
+              var N =
+                  (te * se * S[G] +
+                    ce * V * S[H] +
+                    be * Y * S[Z] +
+                    Q * D * S[q]) /
+                  C,
+                B =
+                  (te * se * (S[G] - b[G]) +
+                    ce * V * (S[H] - b[H]) +
+                    be * Y * (S[Z] - b[Z]) +
+                    Q * D * (S[q] - b[q])) /
+                  C,
+                he = X + B;
+              this.particleVel[2 * c + _] = (1 - t) * N + t * he;
+            }
+          }
+        }
+      if (e) {
+        for (var c = 0; c < S.length; c++) C[c] > 0 && (S[c] /= C[c]);
+        for (var c = 0; c < this.fNumX; c++)
+          for (var ve = 0; ve < this.fNumY; ve++) {
+            var de = this.cellType[c * r + ve] == SOLID_CELL;
+            (de || (c > 0 && this.cellType[(c - 1) * r + ve] == SOLID_CELL)) &&
+              (this.u[c * r + ve] = this.prevU[c * r + ve]),
+              (de || (ve > 0 && this.cellType[c * r + ve - 1] == SOLID_CELL)) &&
+                (this.v[c * r + ve] = this.prevV[c * r + ve]);
+          }
+      }
+    }
+  }
+  solveIncompressibility(e, t, r, n = !0) {
+    this.p.fill(0), this.prevU.set(this.u), this.prevV.set(this.v);
+    for (
+      var a = this.fNumY, l = (this.density * this.h) / t, c = 0;
+      c < this.fNumCells;
+      c++
+    )
+      this.u[c], this.v[c];
+    for (var u = 0; u < e; u++)
+      for (var c = 1; c < this.fNumX - 1; c++)
+        for (var f = 1; f < this.fNumY - 1; f++)
+          if (this.cellType[c * a + f] == FLUID_CELL) {
+            var p = c * a + f,
+              g = (c - 1) * a + f,
+              v = (c + 1) * a + f,
+              _ = c * a + f - 1,
+              T = c * a + f + 1,
+              w = this.s[p],
+              M = this.s[g],
+              S = this.s[v],
+              b = this.s[_],
+              C = this.s[T],
+              w = M + S + b + C;
+            if (w != 0) {
+              var R = this.u[v] - this.u[p] + this.v[T] - this.v[p];
+              if (this.particleRestDensity > 0 && n) {
+                var E = 0.5,
+                  I =
+                    this.particleDensity[c * a + f] - this.particleRestDensity;
+                I > 0 && (R = R - E * I);
+              }
+              var O = -R / w;
+              (O *= r),
+                (this.p[p] += l * O),
+                (this.u[p] -= M * O),
+                (this.u[v] += S * O),
+                (this.v[p] -= b * O),
+                (this.v[T] += C * O);
+            }
+          }
+  }
+  resetParticles() {}
+  simulate(e, t, r, n, a, l, c, u, f, p, g, v, _) {
+    e = Math.min(e, 1 / 60);
+    var T = 1,
+      M = e / T;
+    let S = Math.ceil(EMIT_RATE * e),
+      b = 0;
+    for (var C = 0; C < T; C++) {
+      for (let R = 0; R < this.numParticles && !(b / T >= S); R++)
+        if (this.particleStatuses[R] == 0) {
+          let E = Math.random();
+          (this.particlePos[2 * R + 0] =
+            this.particlePrevPos[2 * R + 0] =
+            this.particlePosOut[2 * R + 0] =
+              math.mix(this.emitterPosA.x, this.emitterPosB.x, E) +
+              (Math.random() - 0.5) * 0.01),
+            (this.particlePos[2 * R + 1] =
+              this.particlePrevPos[2 * R + 1] =
+              this.particlePosOut[2 * R + 1] =
+                math.mix(this.emitterPosA.y, this.emitterPosB.y, E) +
+                (Math.random() - 0.5) * 0.01),
+            (this.particleInfo[2 * R + 0] = Math.random() * Math.PI * 2),
+            (this.particleInfo[2 * R + 1] = 0),
+            (this.particleDir[2 * R + 0] = 0),
+            (this.particleDir[2 * R + 1] = -1);
+          let I = (2 + Math.pow(Math.random(), 2) * 3) * t * 0.1;
+          (this.particleVel[R * 2 + 0] = 0),
+            (this.particleVel[R * 2 + 1] = I),
+            (this.particleStatuses[R] = 1),
+            b++;
+        }
+      this.integrateParticles(M, t),
+        u && this.pushParticlesApart(a),
+        this.handleParticleCollisions(M, f, p, g, v, _),
+        this.transferVelocities(!0),
+        this.updateParticleDensity(),
+        this.solveIncompressibility(n, M, l, c),
+        this.transferVelocities(!1, r);
+      for (var w = 0; w < this.numParticles; w++)
+        (this.particlePosOut[2 * w] =
+          this.particlePos[2 * w] +
+          (this.particlePosOut[2 * w] - this.particlePrevPos[2 * w]) * 0.5),
+          (this.particlePosOut[2 * w + 1] =
+            this.particlePos[2 * w + 1] +
+            (this.particlePosOut[2 * w + 1] - this.particlePrevPos[2 * w + 1]) *
+              0.5);
+    }
+  }
+}
+const flipSim = new FlipSim(),
+  vert = `#define GLSLIFY 1
+attribute vec2 instancedPos;attribute vec2 instancedInfo;uniform vec2 u_tankOffset;uniform vec2 u_tankSize;uniform vec2 u_tankActualSize;uniform vec2 u_renderScale;uniform float u_radius;uniform float u_opacity;
+#include <ufxVert>
+#ifdef IS_TEXTURE
+attribute vec4 instanceColorShape;varying vec3 v_color;varying vec3 v_colorMix;varying vec2 v_uv;
+#endif
+void main(){float angle=instancedInfo.x;float s=sin(angle);float c=cos(angle);mat2 m=mat2(c,-s,s,c);vec3 basePos=vec3((instancedPos-u_tankOffset)/u_tankActualSize-vec2(.5),0.0);basePos.y=-basePos.y;basePos.xy*=u_renderScale*2.;float particleSize=1.;
+#ifdef IS_TEXTURE
+float colorFract=fract(instanceColorShape.w/3.);v_color=instanceColorShape.rgb;v_colorMix=vec3(colorFract<0.25 ? 1. : 0.,abs(colorFract-.5)<0.25 ? 1. : 0.,colorFract>0.75 ? 1. : 0.);v_uv=uv;v_uv.x=(v_uv.x+floor(instanceColorShape.w/3.))/8.;
+#else
+particleSize+=min(1.,abs(instancedInfo.y)*0.01);
+#endif
+vec3 screenPos=getScreenPosition(basePos);screenPos.xy+=(m*position.xy)*u_radius*particleSize*u_renderScale.x*2.*u_opacity;gl_Position=projectionMatrix*modelViewMatrix*vec4(screenPos,1.0);}`,
+  frag$3 = `#define GLSLIFY 1
+#ifdef IS_TEXTURE
+uniform sampler2D u_texture;varying vec3 v_color;varying vec3 v_colorMix;varying vec2 v_uv;
+#else
+uniform vec3 u_color;
+#endif
+void main(){
+#ifdef IS_TEXTURE
+float a=dot(v_colorMix,texture2D(u_texture,v_uv).rgb);gl_FragColor=vec4(v_color,a);
+#else
+gl_FragColor=vec4(u_color,1.);
+#endif
+}`;
+let COLORS = [
+  "#ff383c",
+  "#0029ff",
+  "#bb2bff",
+  "#1eff5d",
+  "#cfff0f",
+  "#d6e4ec",
+  "#bbcbda",
+  "#7a8d9b",
+  "#262229",
+];
+class FlipAnimation {
+  PRESSURE_ITERATION = 60;
+  NUM_PARTICLES_ITERS = 4;
+  OVER_RELAXATION = 1;
+  FLIP_RATIO = 0;
+  mesh;
+  meshList = [];
+  top = 0;
+  height = 0;
+  gravity = 0;
+  isActive = !1;
+  needsReset = !1;
+  hasDown = !1;
+  prevViewportWidth = 0;
+  prevViewportHeight = 0;
+  opacity = 1;
+  colorHex;
+  container = new Object3D();
+  shapedContainer = new Object3D();
+  texturedContainer = new Object3D();
+  prevUseTextured = null;
+  useTextured = !0;
+  sharedUniforms = {
+    u_tankOffset: {
+      value: new Vector2(),
+    },
+    u_tankSize: {
+      value: new Vector2(),
+    },
+    u_tankActualSize: {
+      value: new Vector2(),
+    },
+    u_radius: {
+      value: 0,
+    },
+    u_opacity: {
+      value: 0,
+    },
+    u_renderScale: {
+      value: new Vector2(),
+    },
+    u_color: {
+      value: new Color("#1A2FFB"),
+    },
+    u_texture: {
+      value: null,
+    },
+  };
+  preInit() {
+    let e = [];
+    for (let n = 0; n < COLORS.length; n++) COLORS[n] = new Color(COLORS[n]);
+    let t = new BufferGeometry();
+    t.setAttribute(
+      "position",
+      new BufferAttribute(
+        new Float32Array([
+          0.0714286, -0.5, 0, -0.0714286, -0.5, 0, 0.5, -0.0714286, 0,
+          0.0714286, -0.0714286, 0, -0.0714286, -0.0714286, 0, -0.5, -0.0714286,
+          0, 0.5, 0.0714286, 0, 0.0714286, 0.0714286, 0, -0.0714286, 0.0714286,
+          0, -0.5, 0.0714286, 0, 0.0714286, 0.5, 0, -0.0714286, 0.5, 0,
+        ]),
+        3
+      )
+    ),
+      t.setIndex(
+        new BufferAttribute(
+          new Uint8Array([
+            4, 5, 9, 0, 4, 3, 8, 7, 3, 7, 2, 3, 7, 6, 2, 11, 10, 7, 7, 8, 11, 3,
+            4, 8, 0, 1, 4, 4, 9, 8,
+          ]),
+          1
+        )
+      ),
+      e.push(t),
+      e.push(new PlaneGeometry(0.8, 0.8)),
+      e.push(new CircleGeometry(0.4, 10)),
+      e.push(new CircleGeometry(0.5, 3)),
+      e.push(new PlaneGeometry(1.6, 1.6));
+    let r = properties.loader.add(settings.TEXTURE_PATH + "flip_texture.png", {
+      type: "texture",
+    }).content;
+    this.sharedUniforms.u_texture.value = r;
+    for (let n = 0; n < e.length; n++) {
+      let a = e[n],
+        l = new InstancedBufferGeometry();
+      for (let u in a.attributes) l.setAttribute(u, a.attributes[u]);
+      l.index = a.index;
+      let c = new UfxMesh({
+        geometry: l,
+        material: new ShaderMaterial({
+          uniforms: this.sharedUniforms,
+          vertexShader: vert,
+          fragmentShader: frag$3,
+          depthWrite: !1,
+          depthTest: !1,
+          side: DoubleSide,
+        }),
+      });
+      (c.material.extensions.derivatives = !0),
+        (c.frustumCulled = !1),
+        n < e.length - 1
+          ? this.shapedContainer.add(c)
+          : (this.texturedContainer.add(c),
+            (c.material.defines.IS_TEXTURE = !0),
+            (c.material.transparent = !0)),
+        this.meshList.push(c);
+    }
+    this.container.add(this.shapedContainer),
+      this.container.add(this.texturedContainer),
+      pageExtraSections.postUfxContainer.add(this.container);
+  }
+  init() {}
+  reInitTank() {
+    let e = properties.viewportWidth,
+      t = properties.viewportHeight;
+    scrollManager.syncDom(),
+      (this.capturedOffsetY = -scrollManager.scrollPixel + endSection.offsetY);
+    let r =
+        document.querySelector("#end-section-outer").getBoundingClientRect()
+          .top - this.capturedOffsetY,
+      n =
+        document.querySelector("#end-section-outer").getBoundingClientRect()
+          .bottom - this.capturedOffsetY,
+      a =
+        this.prevViewportWidth != e ||
+        this.prevViewportHeight != t ||
+        !flipSim.hasInitialized ||
+        this.prevUseTextured !== this.useTextured;
+    (this.prevUseTextured = this.useTextured),
+      a &&
+        ((this.prevViewportWidth = properties.viewportWidth),
+        (this.prevViewportHeight = properties.viewportHeight));
+    var l = 2,
+      c = (l * t) / e;
+    let u = this.useTextured ? 0.4 : 1;
+    var f = Math.ceil(math.fit(e, 320, 2560, 20, 90) * u),
+      p = (this.tankWidth = 1 * l),
+      g = (this.tankHeight = 1 * c),
+      v = p / f,
+      _ = 1;
+    this.gravity =
+      Math.ceil(math.fit(e, 320, 2560, -15, -3)) * (this.useTextured ? 1.5 : 1);
+    var T = 0.2 * v,
+      M = Math.ceil(math.fit(e, 320, 2560, 20, 80) * u),
+      S = Math.ceil((M * t) / e),
+      b =
+        Math.ceil((M * S) / (this.meshList.length - 1)) *
+        (this.meshList.length - 1);
+    a && flipSim.init(_, p, g, v, T, b),
+      this.sharedUniforms.u_tankOffset.value.set(flipSim.h, flipSim.h),
+      this.sharedUniforms.u_tankSize.value.set(p, g),
+      this.sharedUniforms.u_tankActualSize.value.set(
+        flipSim.tankInnerWidth,
+        flipSim.tankInnerHeight
+      ),
+      (this.sharedUniforms.u_radius.value = T),
+      this.sharedUniforms.u_renderScale.value.set(
+        e / p,
+        ((e / p) * flipSim.tankInnerHeight) / flipSim.tankInnerWidth
+      );
+    let C = (r + n) >> 1,
+      w = e,
+      R = (flipSim.tankInnerHeight / flipSim.tankInnerWidth) * w;
+    (r = C - R / 2), (n = C + R / 2), (this.top = r), (this.height = R);
+    let E = flipSim.particlePosOut.length / 2,
+      I = Math.floor(E / (this.meshList.length - 1)),
+      O = 0;
+    for (let k = 0; k < this.meshList.length; k++) {
+      let L = this.meshList[k];
+      if (a) {
+        let F;
+        if (k < this.meshList.length - 1)
+          (F = new InstancedInterleavedBuffer(flipSim.particlePosOut, 2, 4)),
+            L.geometry.setAttribute(
+              "instancedPos",
+              new InterleavedBufferAttribute(F, 2, O * 2)
+            ),
+            (L.geometry.attributes.instancedPos.usage = DynamicDrawUsage),
+            (F.count /= 4),
+            (F = new InstancedInterleavedBuffer(flipSim.particleInfo, 2, 4)),
+            L.geometry.setAttribute(
+              "instancedInfo",
+              new InterleavedBufferAttribute(F, 2, O * 2)
+            ),
+            (L.geometry.attributes.instancedInfo.usage = DynamicDrawUsage),
+            (F.count /= 4),
+            (O += I);
+        else {
+          L.geometry.setAttribute(
+            "instancedPos",
+            new InstancedBufferAttribute(flipSim.particlePosOut, 2)
+          ),
+            (L.geometry.attributes.instancedPos.usage = DynamicDrawUsage),
+            L.geometry.setAttribute(
+              "instancedInfo",
+              new InstancedBufferAttribute(flipSim.particleInfo, 2)
+            ),
+            (L.geometry.attributes.instancedInfo.usage = DynamicDrawUsage);
+          let se = flipSim.particlePosOut.length / 2,
+            V = new Float32Array(se * 4);
+          for (let Y = 0, D = 0; Y < se; Y++, D += 4) {
+            let G = Y % 45;
+            G = G < 5 ? G : 5 + ((G - 5) % 4);
+            let H = COLORS[G];
+            (V[D + 0] = H.r),
+              (V[D + 1] = H.g),
+              (V[D + 2] = H.b),
+              (V[D + 3] = ~~(Y / 23) % 23);
+          }
+          L.geometry.setAttribute(
+            "instanceColorShape",
+            new InstancedBufferAttribute(V, 4)
+          );
+        }
+        L.geometry._maxInstanceCount = flipSim.maxParticles;
+      }
+      L.syncRect(0, r + this.capturedOffsetY, e, R, this.capturedOffsetY);
+    }
+    if (a && !this.useTextured) {
+      let k = document.querySelector("#end-bottom");
+      flipSim.addColliderRect(
+        this.convertDomRectToTankRect(k.getBoundingClientRect()),
+        -1,
+        -1,
+        -1,
+        -1
+      );
+    }
+    this.hasDown = !1;
+  }
+  resize() {
+    this.isActive && this.meshList.length > 0
+      ? this.reInitTank()
+      : (this.needsReset = !0),
+      (this.hasDown = !1);
+  }
+  convertDomRectToTankRect(e) {
+    let t = this.convertPixelXYToTankXY(e.left, e.bottom),
+      r = this.convertPixelSizeToTankSize(e.width, e.height);
+    return {
+      x: t.x,
+      y: t.y,
+      w: r.w,
+      h: r.h,
+    };
+  }
+  convertPixelSizeToTankSize(e, t) {
+    return {
+      w: (e / properties.viewportWidth) * flipSim.tankInnerWidth,
+      h: (t / this.height) * flipSim.tankInnerHeight,
+    };
+  }
+  convertPixelXYToTankXY(e, t) {
+    let r = this.convertPixelSizeToTankSize(
+      math.clamp(e, 0, properties.viewportWidth - 1),
+      math.clamp(
+        this.top +
+          this.height -
+          t -
+          scrollManager.scrollPixel +
+          endSection.offsetY,
+        0,
+        properties.viewportHeight - 1
+      )
+    );
+    return {
+      x: r.w + flipSim.h,
+      y: r.h + flipSim.h,
+    };
+  }
+  update(e) {
+    if (this.isActive) {
+      if (
+        ((this.needsReset || this.prevUseTextured !== this.useTextured) &&
+          ((this.needsReset = !1), this.reInitTank()),
+        properties.hasInitialized)
+      ) {
+        this.useTextured
+          ? ((this.shapedContainer.visible = !1),
+            (this.texturedContainer.visible = !0))
+          : ((this.shapedContainer.visible = !0),
+            (this.texturedContainer.visible = !1));
+        let t = -scrollManager.scrollPixel + endSection.offsetY;
+        if (
+          (this.sharedUniforms.u_color.value.setStyle(this.colorHex),
+          (this.sharedUniforms.u_opacity.value = this.opacity),
+          this.meshList[0].testViewport(t))
+        ) {
+          e = Math.max(1 / 120, e);
+          let r = !0,
+            n = !0,
+            a = this.convertPixelXYToTankXY(
+              input.prevMousePixelXY.x,
+              input.prevMousePixelXY.y
+            ),
+            l = this.convertPixelXYToTankXY(
+              input.mousePixelXY.x,
+              input.mousePixelXY.y
+            ),
+            c = l.x,
+            u = l.y,
+            f = (l.x - a.x) / e,
+            p = (l.y - a.y) / e,
+            g =
+              (150 / properties.viewportWidth) *
+              (properties.useMobileLayout
+                ? input.isDown
+                  ? 0.35
+                  : 0
+                : math.fit(Math.sqrt(f * f + p * p), 0, 2, 0.2, 1));
+          input.isDown && !properties.useMobileLayout
+            ? ((c = -1e3),
+              (u = -1e3),
+              (this.hasDown = !0),
+              (flipSim.isFlushing = !0),
+              flipSim.emitterPosA.copy(
+                this.convertPixelXYToTankXY(
+                  input.prevMousePixelXY.x,
+                  input.prevMousePixelXY.y
+                )
+              ),
+              flipSim.emitterPosB.copy(
+                this.convertPixelXYToTankXY(
+                  input.mousePixelXY.x,
+                  input.mousePixelXY.y
+                )
+              ))
+            : (this.hasDown ||
+                flipSim.emitterPosA.copy(
+                  flipSim.emitterPosB.set(1, this.tankHeight * 0.5, 0)
+                ),
+              (flipSim.isFlushing = !1)),
+            flipSim.simulate(
+              e,
+              this.gravity,
+              this.FLIP_RATIO,
+              this.PRESSURE_ITERATION,
+              this.NUM_PARTICLES_ITERS,
+              this.OVER_RELAXATION,
+              r,
+              n,
+              c,
+              u,
+              g,
+              f,
+              p
+            );
+          for (let v = 0; v < this.meshList.length; v++) {
+            let _ = this.meshList[v];
+            (_.geometry.attributes.instancedPos.needsUpdate = !0),
+              (_.geometry.attributes.instancedInfo.needsUpdate = !0),
+              _.update(t),
+              (_.visible = !0);
+          }
+        } else
+          for (let r = 0; r < this.meshList.length; r++) {
+            let n = this.meshList[r];
+            n.visible = !1;
+          }
+      }
+    } else {
+      this.needsReset = !0;
+      for (let t = 0; t < this.meshList.length; t++) {
+        let r = this.meshList[t];
+        r.visible = !1;
+      }
+    }
+  }
+}
+const flipAnimation = new FlipAnimation();
